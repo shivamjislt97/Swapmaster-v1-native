@@ -1,0 +1,7 @@
+# Everything ignored - docs only repo
+*
+!.gitignore
+!README.md
+!SETTINGS_USED.md
+!auto_setup.sh
+!.env.example
