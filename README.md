@@ -4,60 +4,116 @@ FaceFusion Telegram Bot with GPU support, GDrive upload, MEGA download, and auto
 
 ## Download
 
-**GDrive Backup (3.1GB):** [SwapMaster V1 Native Backup](https://drive.google.com/drive/folders/YOUR_FOLDER_ID)
-
-Extract the zip to get the full project with all models, configs, and code.
+**GDrive Backup (1.6GB):** [swapmaster-v1-native-23-06-2026.tar.gz](https://drive.google.com/open?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef)
 
 ---
 
-## Quick Start (AI Prompt)
-
-Copy-paste this prompt to any AI assistant to auto-setup everything:
+## Quick Start - AI Prompt (Copy-Paste to Any AI)
 
 ```
-I have a SwapMaster V1 Native project (FaceFusion Telegram Bot). I need you to set it up on a new Lightning AI studio (Ubuntu, CUDA GPU).
+I have a SwapMaster V1 Native project (FaceFusion Telegram Bot) backup on GDrive.
+I need you to set it up completely on a new Lightning AI studio (Ubuntu, CUDA GPU).
 
-Steps to execute:
-1. Extract the project zip to the working directory
-2. Run: chmod +x auto_setup.sh && ./auto_setup.sh
-3. Edit .env file: set BOT_TOKEN, ALLOWED_USER_ID, RCLONE_CONF path
-4. Setup rclone for GDrive: run "rclone config" and create remote named "gdrive"
-5. Start bot: export PATH="$HOME/.local/bin:$PATH" && python3 app/startup.py
+STEP-BY-STEP COMMANDS TO EXECUTE:
 
-Requirements:
-- Python 3.10+, CUDA GPU, internet access
-- Bot token from @BotFather
-- Your Telegram user ID from @userinfobot
+# 1. Download and extract the backup
+cd /teamspace/studios/this_studio
+curl -L -o swapmaster.tar.gz "https://drive.google.com/uc?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef"
+tar xzf swapmaster.tar.gz
+cd swapmaster-v1-native
 
-Key paths in .env:
-- RCLONE_CONF=/full/path/to/swapmaster-v1-native/.config/rclone/rclone.conf
-- OUTPUT_VIDEO_ENCODER=h264_qsv (for Intel QSV) or libx264 (if available)
-- EXECUTION_PROVIDER=cuda
+# 2. Add ~/.local/bin to PATH (permanent + current session)
+export PATH="$HOME/.local/bin:$PATH"
+grep -q '.local/bin' ~/.bashrc 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
-Verify working: curl http://localhost:8765/healthz (should return "ok")
+# 3. Install FFmpeg static build (with libx264 support)
+mkdir -p ~/.local/bin
+cd /tmp
+curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+tar xf ffmpeg.tar.xz
+cp ffmpeg-*-static/ffmpeg ~/.local/bin/
+cp ffmpeg-*-static/ffprobe ~/.local/bin/
+chmod +x ~/.local/bin/ffmpeg ~/.local/bin/ffprobe
+rm -rf ffmpeg*
+cd /teamspace/studios/this_studio/swapmaster-v1-native
+
+# 4. Install rclone
+curl -L -o /tmp/rclone.zip https://downloads.rclone.org/current/rclone-v1.74.3-linux-amd64.zip
+cd /tmp && unzip -o rclone.zip && cp rclone-*-linux-amd64/rclone ~/.local/bin/
+chmod +x ~/.local/bin/rclone
+cd /teamspace/studios/this_studio/swapmaster-v1-native
+
+# 5. Install Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# 6. Create .env from template and configure
+cp .env.example .env
+PROJECT_DIR="$(pwd)"
+sed -i "s|CHANGE_TO_YOUR_PATH.*|$PROJECT_DIR|" .env
+
+# 7. IMPORTANT: Edit .env manually with your credentials:
+#    BOT_TOKEN=your_telegram_bot_token (from @BotFather)
+#    ALLOWED_USER_ID=your_telegram_user_id (from @userinfobot)
+#    MEGA_EMAIL=your_mega_email (or leave dummy)
+#    MEGA_PASSWORD=your_mega_password (or leave dummy)
+
+# 8. Setup rclone for GDrive (if not already configured)
+#    Run: rclone config
+#    Create remote named "gdrive" with Google Drive scope
+
+# 9. Verify encoder works
+ffmpeg -encoders 2>/dev/null | grep -E "libx264|h264_qsv"
+# If libx264 found: OUTPUT_VIDEO_ENCODER=libx264
+# If h264_qsv found: OUTPUT_VIDEO_ENCODER=h264_qsv
+# Update .env accordingly
+
+# 10. Start the bot
+export PATH="$HOME/.local/bin:$PATH"
+python3 app/startup.py
+
+# 11. Verify it works
+curl http://localhost:8765/healthz
+# Should return: ok
 ```
 
 ---
 
-## Manual Setup
+## Manual Setup (Step-by-Step)
 
-### Step 1: Extract Backup
+### Step 1: Download & Extract
 
 ```bash
-# Download from GDrive, then:
 cd /teamspace/studios/this_studio
-tar xzf swapmaster-v1-native-23-06-2026.tar.gz
+curl -L -o swapmaster.tar.gz "https://drive.google.com/uc?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef"
+tar xzf swapmaster.tar.gz
 cd swapmaster-v1-native
 ```
 
-### Step 2: Install System Dependencies
+### Step 2: PATH Setup (CRITICAL - Do This First!)
 
 ```bash
-# Add ~/.local/bin to PATH (for FFmpeg and rclone)
+# Add ~/.local/bin to PATH for current session
 export PATH="$HOME/.local/bin:$PATH"
+
+# Make permanent (add to bashrc)
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
-# FFmpeg (static build with libx264)
+# Verify
+echo $PATH | grep -o ".local/bin" | head -1
+# Should output: .local/bin
+```
+
+> **Why this matters:** FFmpeg and rclone are installed to `~/.local/bin`. If this path is missing, you'll get "ffmpeg not found" and "rclone not found" errors. The bot's worker subprocess also needs this PATH - it's auto-injected by `prepare_cuda_runtime_env()` in bot.py.
+
+### Step 3: Install FFmpeg (Static Build)
+
+```bash
+# Check if already installed
+~/.local/bin/ffmpeg -version 2>/dev/null | head -1
+# If "command not found", install:
+
 mkdir -p ~/.local/bin
 cd /tmp
 curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
@@ -68,148 +124,246 @@ chmod +x ~/.local/bin/ffmpeg ~/.local/bin/ffprobe
 rm -rf ffmpeg*
 cd -
 
-# rclone
-curl -s https://rclone.org/install.sh | sudo bash
-# OR if no sudo:
+# Verify libx264 support
+~/.local/bin/ffmpeg -encoders 2>/dev/null | grep libx264
+```
+
+> **Important:** System `apt-get install ffmpeg` often lacks libx264. Use the static build from John Van Sickle.
+
+### Step 4: Install rclone
+
+```bash
+# Check if already installed
+rclone version 2>/dev/null | head -1
+# If not found:
+
 curl -L -o /tmp/rclone.zip https://downloads.rclone.org/current/rclone-v1.74.3-linux-amd64.zip
-cd /tmp && unzip -o rclone.zip && cp rclone-*-linux-amd64/rclone ~/.local/bin/
+cd /tmp && unzip -o rclone.zip
+cp rclone-*-linux-amd64/rclone ~/.local/bin/
 chmod +x ~/.local/bin/rclone
+rm -rf rclone*
 cd -
 ```
 
-### Step 3: Install Python Dependencies
+### Step 5: Install Python Dependencies
 
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# PyTorch with CUDA
+# PyTorch with CUDA (REQUIRED for GPU)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### Step 4: Configure .env
+### Step 6: Configure .env
 
 ```bash
 cp .env.example .env
-nano .env  # Edit with your values
+PROJECT_DIR="$(pwd)"
+sed -i "s|CHANGE_TO_YOUR_PATH.*|$PROJECT_DIR|" .env
 ```
 
-Required changes:
-- `BOT_TOKEN` - Get from @BotFather on Telegram
-- `ALLOWED_USER_ID` - Your Telegram user ID (get from @userinfobot)
-- `RCLONE_CONF` - Full path to `.config/rclone/rclone.conf`
-
-### Step 5: Setup rclone for GDrive
+Then edit `.env` with your values:
 
 ```bash
-# Interactive setup
+nano .env
+```
+
+**Required changes in .env:**
+
+| Variable | How to get | Example |
+|----------|-----------|---------|
+| `BOT_TOKEN` | @BotFather on Telegram | `123456:ABC-DEF...` |
+| `ALLOWED_USER_ID` | @userinfobot on Telegram | `6267031612` |
+| `RCLONE_CONF` | Auto-set by sed command above | `/teamspace/.../rclone.conf` |
+| `MEGA_EMAIL` | Your MEGA account email | `you@email.com` |
+| `MEGA_PASSWORD` | Your MEGA account password | `your_password` |
+
+### Step 7: Setup rclone for GDrive
+
+```bash
 rclone config
 
 # When prompted:
+# - n) New remote
 # - Name: gdrive
-# - Type: Google Drive
-# - Client ID: (leave blank)
-# - Client Secret: (leave blank)
+# - Storage: Google Drive
+# - Client ID: (leave blank - press Enter)
+# - Client Secret: (leave blank - press Enter)
 # - Scope: 1 (full access)
-# - Root folder ID: (leave blank)
+# - Root folder ID: (leave blank - press Enter)
 # - Service account: No
 # - Edit advanced config: No
-# - Auto config: Yes (opens browser)
+# - Auto config: Yes (opens browser, authorize access)
 # - Shared with me: No
 # - Team drive: No
+# - y) Yes to confirm
+# - q) Quit config
 ```
 
-### Step 6: Start the Bot
+### Step 8: Start the Bot
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 python3 app/startup.py
 ```
 
+### Step 9: Verify Working
+
+```bash
+# Health check
+curl http://localhost:8765/healthz
+# Expected: ok
+
+# Check GPU detection in logs
+# Look for: [OK] GPU: Tesla T4 (15360MB) -> cuda
+
+# Test via Telegram
+# Send face photo to bot, then send video/MEGA link
+```
+
+---
+
+## Complete .env Reference
+
+```env
+# === REQUIRED ===
+BOT_TOKEN=your_bot_token_here           # From @BotFather
+ALLOWED_USER_ID=your_user_id_here       # From @userinfobot
+
+# === MEGA ===
+MEGA_EMAIL=your_mega_email@example.com  # For downloading MEGA links
+MEGA_PASSWORD=your_mega_password        # MEGA account password
+
+# === GDRIVE UPLOAD ===
+GDRIVE_ENABLED=true
+GDRIVE_REMOTE_NAME=gdrive               # Must match rclone remote name
+GDRIVE_FOLDER=gdrive:faceswap_output    # Format: remote_name:folder_name
+RCLONE_BIN=rclone
+RCLONE_CONF=/full/path/to/.config/rclone/rclone.conf  # MUST be absolute path
+
+# === GPU / FACEFUSION ===
+EXECUTION_PROVIDER=cuda                 # "cuda" for GPU, "cpu" for CPU-only
+GPU_ONLY_MODE=true
+FACE_SWAPPER_MODEL=inswapper_128        # Options: inswapper_128, inswapper_128_fp16, hyperswap_1a_256
+FACE_ENHANCER_MODEL=gfpgan_1.4          # Options: gfpgan_1.4, codeformer
+FACE_ENHANCER_BLEND=80                  # 0-100, higher = more enhancement
+ENABLE_FACE_ENHANCER=true
+OUTPUT_VIDEO_ENCODER=h264_qsv           # Options: h264_qsv, libx264, libvpx-vp9, rawvideo
+EXECUTION_THREAD_COUNT=4                # Match your CPU cores
+THREAD_COUNT=4
+
+# === BOT BEHAVIOUR ===
+AUTO_SLEEP_ENABLED=true
+AUTO_SLEEP_MINUTES=30
+POST_JOB_AUTO_SLEEP_SECONDS=300         # Sleep after job completes
+DASHBOARD_ENABLED=true
+DASHBOARD_PORT=8765
+BYPASS_CONTENT_ANALYSER=false
+
+# === WATCHDOG TIMEOUTS ===
+PIPELINE_WATCHDOG_PROCESSING_SEC=600    # 10 min max for processing
+PIPELINE_WATCHDOG_MERGING_SEC=300       # 5 min max for merging
+PIPELINE_WATCHDOG_UPLOADING_SEC=300     # 5 min max for upload
+DASHBOARD_PUBLIC_URL=https://your-dashboard-url.cloudspaces.litng.ai
+```
+
 ---
 
 ## Path Setup Guide
 
-All paths must be absolute. Here's how to set them:
+### All Paths Must Be Absolute
 
-### Finding Your Paths
+| Path | Variable | How to Find |
+|------|----------|-------------|
+| Python | - | `which python3` |
+| FFmpeg | Auto-detected | `~/.local/bin/ffmpeg` |
+| rclone | Auto-detected | `which rclone` |
+| rclone.conf | `RCLONE_CONF` | `pwd` + `/.config/rclone/rclone.conf` |
+| Project root | - | `pwd` (where `.env` is) |
 
-```bash
-# Find Python
-which python3
-# Output: /usr/bin/python3 or /opt/conda/bin/python3
-
-# Find FFmpeg
-which ffmpeg
-# Output: ~/.local/bin/ffmpeg or /usr/bin/ffmpeg
-
-# Find rclone
-which rclone
-# Output: /usr/bin/rclone or ~/.local/bin/rclone
-
-# Find project root (where .env is)
-pwd
-# Output: /teamspace/studios/this_studio/swapmaster-v1-native
-```
-
-### Setting Paths in .env
+### Auto-Set RCLONE_CONF Path
 
 ```bash
-# Get absolute path of project
 PROJECT_DIR="$(pwd)"
-
-# Set in .env
 sed -i "s|RCLONE_CONF=.*|RCLONE_CONF=$PROJECT_DIR/.config/rclone/rclone.conf|" .env
 ```
 
+### How PATH Flows Through the System
+
+```
+Your terminal
+  └─ export PATH="$HOME/.local/bin:$PATH"
+      └─ python3 app/startup.py
+          └─ .env loaded (overrides os.environ)
+              └─ bot.py starts worker subprocess
+                  └─ worker_env = os.environ.copy()
+                      └─ prepare_cuda_runtime_env() adds ~/.local/bin to PATH
+                          └─ FaceFusion subprocess uses PATH
+                              └─ Finds ~/.local/bin/ffmpeg (static, with libx264)
+```
+
+> **Key:** `prepare_cuda_runtime_env()` in bot.py automatically prepends `~/.local/bin` to worker subprocess PATH. This ensures static FFmpeg is used even if conda/system FFmpeg exists.
+
 ### Common Path Issues
 
-| Error | Fix |
-|-------|-----|
-| `ffmpeg: not found` | Add `~/.local/bin` to PATH |
-| `rclone: not found` | Install rclone or add to PATH |
-| `rclone.conf not found` | Use absolute path in RCLONE_CONF |
-| `No module named 'cv2'` | Run `pip install opencv-python-headless` |
-| `CUDA out of memory` | Reduce EXECUTION_THREAD_COUNT to 2 |
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ffmpeg: not found` | `~/.local/bin` not in PATH | `export PATH="$HOME/.local/bin:$PATH"` |
+| `rclone: not found` | rclone not installed | Install rclone to `~/.local/bin/` |
+| `rclone.conf not found` | Relative path in RCLONE_CONF | Use absolute path |
+| `libx264 not found` | conda FFmpeg overriding static | Ensure `~/.local/bin` is FIRST in PATH |
+| `No module named 'cv2'` | Missing opencv | `pip install opencv-python-headless` |
 
 ---
 
 ## GPU Change Guide
 
-If you switch to a different GPU:
-
-### Check New GPU
+### Check Your GPU
 
 ```bash
 nvidia-smi
 # Note: GPU name and VRAM
 ```
 
-### Update .env Based on GPU
+### Settings by GPU
 
-| GPU Type | VRAM | Settings |
-|----------|------|----------|
-| Tesla T4 | 16GB | `EXECUTION_THREAD_COUNT=4`, `GPU_ONLY_MODE=true` |
-| Tesla V100 | 16/32GB | `EXECUTION_THREAD_COUNT=6`, `GPU_ONLY_MODE=true` |
-| Tesla A100 | 40/80GB | `EXECUTION_THREAD_COUNT=8`, `GPU_ONLY_MODE=true` |
-| RTX 3060 | 12GB | `EXECUTION_THREAD_COUNT=2`, `GPU_ONLY_MODE=true` |
-| RTX 3090 | 24GB | `EXECUTION_THREAD_COUNT=4`, `GPU_ONLY_MODE=true` |
-| No GPU | - | `EXECUTION_PROVIDER=cpu`, `EXECUTION_THREAD_COUNT=2`, `GPU_ONLY_MODE=false` |
+| GPU | VRAM | `EXECUTION_THREAD_COUNT` | `GPU_ONLY_MODE` | Notes |
+|-----|------|--------------------------|-----------------|-------|
+| Tesla T4 | 16GB | 4 | true | Current setting |
+| Tesla V100 | 16GB | 4 | true | |
+| Tesla V100 | 32GB | 6 | true | |
+| Tesla A100 | 40GB | 6 | true | |
+| Tesla A100 | 80GB | 8 | true | |
+| RTX 3060 | 12GB | 2 | true | |
+| RTX 3080 | 10GB | 2 | true | |
+| RTX 3090 | 24GB | 4 | true | |
+| RTX 4090 | 24GB | 4 | true | |
+| No GPU | - | 2 | false | `EXECUTION_PROVIDER=cpu` |
 
-### Update Encoder Based on GPU
+### Update .env for New GPU
 
 ```bash
-# Check available encoders
-ffmpeg -encoders 2>/dev/null | grep -E "libx264|h264_qsv|h264_nvenc"
+# Example: Switching to RTX 3060 (12GB)
+sed -i 's/EXECUTION_THREAD_COUNT=4/EXECUTION_THREAD_COUNT=2/' .env
 
-# NVIDIA GPU (NVENC):
-# OUTPUT_VIDEO_ENCODER=h264_nvenc
+# Example: No GPU available
+sed -i 's/EXECUTION_PROVIDER=cuda/EXECUTION_PROVIDER=cpu/' .env
+sed -i 's/GPU_ONLY_MODE=true/GPU_ONLY_MODE=false/' .env
+sed -i 's/EXECUTION_THREAD_COUNT=4/EXECUTION_THREAD_COUNT=2/' .env
+```
 
-# Intel CPU (QSV):
-# OUTPUT_VIDEO_ENCODER=h264_qsv
+### Check Available Encoders
 
-# Software (no hardware acceleration):
-# OUTPUT_VIDEO_ENCODER=libx264
+```bash
+# Check which encoder your FFmpeg supports
+~/.local/bin/ffmpeg -encoders 2>/dev/null | grep -E "libx264|h264_qsv|h264_nvenc|libvpx-vp9"
+
+# Update .env accordingly:
+# libx264 available?     -> OUTPUT_VIDEO_ENCODER=libx264
+# h264_qsv available?    -> OUTPUT_VIDEO_ENCODER=h264_qsv
+# h264_nvenc available?  -> OUTPUT_VIDEO_ENCODER=h264_nvenc (not in this FaceFusion build)
+# None of above?         -> OUTPUT_VIDEO_ENCODER=rawvideo
 ```
 
 ---
@@ -219,37 +373,53 @@ ffmpeg -encoders 2>/dev/null | grep -E "libx264|h264_qsv|h264_nvenc"
 ### Check All Dependencies
 
 ```bash
-# Python version
-python3 --version
-
-# Required modules
 python3 -c "
-modules = ['telegram', 'cv2', 'numpy', 'PIL', 'insightface', 'onnxruntime', 'fastapi', 'uvicorn', 'mega', 'requests', 'psutil', 'loguru']
-for m in modules:
+import sys
+modules = {
+    'telegram': 'python-telegram-bot',
+    'cv2': 'opencv-python-headless',
+    'numpy': 'numpy',
+    'PIL': 'pillow',
+    'insightface': 'insightface',
+    'onnxruntime': 'onnxruntime-gpu',
+    'fastapi': 'fastapi',
+    'uvicorn': 'uvicorn',
+    'mega': 'mega.py',
+    'requests': 'requests',
+    'psutil': 'psutil',
+    'loguru': 'loguru',
+    'dotenv': 'python-dotenv',
+}
+print(f'Python: {sys.version}')
+for mod, pkg in modules.items():
     try:
-        __import__(m)
-        print(f'OK: {m}')
+        __import__(mod)
+        print(f'OK: {pkg}')
     except ImportError:
-        print(f'MISSING: {m}')
+        print(f'MISSING: {pkg} (pip install {pkg})')
 "
+```
 
+### Check System Tools
+
+```bash
 # GPU
-nvidia-smi
+nvidia-smi 2>/dev/null || echo "NO GPU"
 
 # CUDA
-nvcc --version
+nvcc --version 2>/dev/null || echo "NO CUDA"
 
 # FFmpeg
-ffmpeg -version | head -1
+~/.local/bin/ffmpeg -version 2>/dev/null | head -1 || echo "NO FFMPEG"
 
 # rclone
-rclone version | head -1
+rclone version 2>/dev/null | head -1 || echo "NO RCLONE"
 ```
 
 ### Install Missing Dependencies
 
 ```bash
-# Python packages
+# All Python packages
 pip install python-telegram-bot==20.7 pycryptodome==3.23.0
 pip install onnxruntime-gpu==1.19.2 onnx==1.21.0 insightface==0.7.3
 pip install opencv-python-headless==4.13.0.92 numpy==2.4.6 pillow==11.3.0
@@ -260,9 +430,6 @@ pip install psutil==7.2.2 loguru==0.7.3 python-dotenv==1.2.2
 
 # PyTorch with CUDA
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-
-# System packages (if needed)
-apt-get update && apt-get install -y ffmpeg  # or use static build
 ```
 
 ---
@@ -272,9 +439,8 @@ apt-get update && apt-get install -y ffmpeg  # or use static build
 ### Test 1: Health Check
 
 ```bash
-# Start bot first, then:
 curl http://localhost:8765/healthz
-# Expected: "ok"
+# Expected: ok
 ```
 
 ### Test 2: GPU Detection
@@ -283,8 +449,11 @@ curl http://localhost:8765/healthz
 python3 -c "
 import torch
 print(f'CUDA available: {torch.cuda.is_available()}')
-print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')
-print(f'VRAM: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB' if torch.cuda.is_available() else '')
+if torch.cuda.is_available():
+    print(f'GPU: {torch.cuda.get_device_name(0)}')
+    print(f'VRAM: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB')
+else:
+    print('No GPU detected - will use CPU')
 "
 ```
 
@@ -292,54 +461,69 @@ print(f'VRAM: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB' 
 
 ```bash
 cd app
-python3 -c "
-from facefusion import face_analyser
-print('FaceFusion imported successfully')
-"
+python3 -c "from facefusion import face_analyser; print('FaceFusion OK')"
 ```
 
 ### Test 4: FFmpeg Encoder Test
 
 ```bash
-# Test h264_qsv
-ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=30 -c:v h264_qsv -y /tmp/test_qsv.mp4 2>&1 | tail -3
+# Test your configured encoder
+ENCODER=$(grep OUTPUT_VIDEO_ENCODER .env | cut -d= -f2)
+echo "Testing encoder: $ENCODER"
+~/.local/bin/ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=30 -c:v $ENCODER -y /tmp/test.mp4 2>&1 | tail -5
+# Should succeed without errors
 
-# Test libx264
-ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=30 -c:v libx264 -y /tmp/test_x264.mp4 2>&1 | tail -3
+# If it fails, try alternatives:
+~/.local/bin/ffmpeg -encoders 2>/dev/null | grep -E "libx264|h264_qsv|libvpx-vp9|rawvideo"
 ```
 
-### Test 5: Send Test Job via Telegram
+### Test 5: rclone GDrive
+
+```bash
+rclone lsd gdrive:
+# Should list your GDrive folders
+
+# Test upload
+echo "test" > /tmp/test_upload.txt
+rclone copy /tmp/test_upload.txt gdrive:
+rclone lsf gdrive: | grep test_upload
+# Should show the file
+rm /tmp/test_upload.txt
+```
+
+### Test 6: End-to-End Telegram Test
 
 1. Open Telegram, find your bot
-2. Send a face photo
-3. Send a video/MEGA link
-4. Wait for processing
-5. Check if output is received
+2. Send a face photo (clear face, well-lit)
+3. Wait for bot to acknowledge
+4. Send a video link (YouTube, MEGA, or direct MP4)
+5. Wait for processing (check logs: `tail -f /tmp/swapmaster.log`)
+6. Bot should send back the face-swapped video
 
 ---
 
 ## Bot Management
 
-### Find Active Bot Process
+### Find Active Bot
 
 ```bash
-# Find by process name
+# By process name
 ps aux | grep "startup.py" | grep -v grep
 
-# Find by port
+# By port
 lsof -i :8765
 
-# Find by PID file
+# By PID file
 cat app/pipeline/logs/bot.pid 2>/dev/null && ps -p $(cat app/pipeline/logs/bot.pid)
 ```
 
-### Kill Active Bot
+### Kill Bot
 
 ```bash
-# Kill by PID
+# By PID
 kill $(cat app/pipeline/logs/bot.pid 2>/dev/null)
 
-# Kill all startup.py processes
+# All startup.py processes
 pkill -f "startup.py"
 
 # Force kill
@@ -357,13 +541,13 @@ python3 app/startup.py
 export PATH="$HOME/.local/bin:$PATH"
 nohup python3 app/startup.py > /tmp/swapmaster.log 2>&1 &
 
-# With screen
+# Screen session
 screen -S swapmaster
 export PATH="$HOME/.local/bin:$PATH"
 python3 app/startup.py
 # Ctrl+A, D to detach
 
-# With tmux
+# tmux session
 tmux new -s swapmaster
 export PATH="$HOME/.local/bin:$PATH"
 python3 app/startup.py
@@ -379,33 +563,61 @@ export PATH="$HOME/.local/bin:$PATH"
 nohup python3 app/startup.py > /tmp/swapmaster.log 2>&1 &
 ```
 
+### Check Logs
+
+```bash
+# Live logs
+tail -f /tmp/swapmaster.log
+
+# Recent logs
+tail -50 /tmp/swapmaster.log
+
+# Search for errors
+grep -i "error\|fail\|exception" /tmp/swapmaster.log | tail -20
+```
+
 ---
 
 ## Token Changes
 
 ### Change Telegram Bot Token
 
-1. Open `.env`
-2. Update `BOT_TOKEN=your_new_token`
+1. Get new token from @BotFather
+2. Edit `.env`: `BOT_TOKEN=new_token_here`
 3. Restart bot
 
 ### Change GDrive Token (rclone)
 
+**Method 1: Re-authorize (recommended)**
 ```bash
-# Re-authorize rclone
 rclone config
-# Choose: gdrive -> reconfigure -> follow browser flow
-
-# Or manually update token in rclone.conf
-nano .config/rclone/rclone.conf
-# Update the "token" field with new JSON
+# Choose gdrive -> reconfigure -> follow browser flow
 ```
+
+**Method 2: Manual token update**
+```bash
+# Edit rclone.conf
+nano .config/rclone/rclone.conf
+
+# Update the "token" field with new JSON:
+# token = {"access_token":"ya29...","refresh_token":"1//...","token_type":"Bearer","scope":"https://www.googleapis.com/auth/drive","expires_in":3599}
+```
+
+**How GDrive token works in this project:**
+- `startup.py` loads `.env` and sets `RCLONE_CONF` path
+- `bot.py` reads `persistent/config.json` on startup
+- If `drive_auth_token` exists in config, it overwrites `rclone.conf` with fresh token
+- Token refresh happens automatically when rclone detects expiry
+- If token is invalid, check `persistent/config.json` for stale token
 
 ### Change MEGA Credentials
 
-1. Open `.env`
-2. Update `MEGA_EMAIL` and `MEGA_PASSWORD`
-3. Restart bot
+1. Edit `.env`:
+   ```
+   MEGA_EMAIL=new_email@example.com
+   MEGA_PASSWORD=new_password
+   ```
+2. Restart bot
 
 ---
 
@@ -415,11 +627,11 @@ nano .config/rclone/rclone.conf
 
 This FaceFusion build doesn't support libx264. Fix:
 ```bash
-# Check available encoders
-ffmpeg -encoders 2>/dev/null | grep -E "h264|hevc|vp9"
+# Check what's available
+~/.local/bin/ffmpeg -encoders 2>/dev/null | grep -E "h264|hevc|vp9"
 
-# Update .env
-sed -i 's/OUTPUT_VIDEO_ENCODER=libx264/OUTPUT_VIDEO_ENCODER=h264_qsv/' .env
+# Update encoder in .env
+sed -i 's/OUTPUT_VIDEO_ENCODER=.*/OUTPUT_VIDEO_ENCODER=h264_qsv/' .env
 ```
 
 ### Error: `CUDA out of memory`
@@ -443,7 +655,6 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 ### Error: `rclone.conf not found`
 
 ```bash
-# Set absolute path in .env
 PROJECT_DIR="$(pwd)"
 sed -i "s|RCLONE_CONF=.*|RCLONE_CONF=$PROJECT_DIR/.config/rclone/rclone.conf|" .env
 ```
@@ -454,32 +665,69 @@ sed -i "s|RCLONE_CONF=.*|RCLONE_CONF=$PROJECT_DIR/.config/rclone/rclone.conf|" .
 pip install opencv-python-headless
 ```
 
-### Error: `GDrive upload fails (token expired)`
+### Error: `GDrive upload fails`
 
 ```bash
-# Re-authorize rclone
+# Check rclone config
+rclone lsd gdrive:
+
+# If auth error, re-authorize
 rclone config
-# Follow the browser flow to get new token
+
+# Or check if persistent/config.json has stale token
+cat app/persistent/config.json | python3 -m json.tool | grep drive_auth
 ```
 
 ### Bot starts but no response on Telegram
 
-1. Check bot token is correct in `.env`
-2. Check `ALLOWED_USER_ID` matches your Telegram user ID
-3. Check bot is running: `ps aux | grep startup.py`
+1. Check bot token: `grep BOT_TOKEN .env`
+2. Check user ID: `grep ALLOWED_USER_ID .env`
+3. Check bot running: `ps aux | grep startup.py`
 4. Check logs: `tail -f /tmp/swapmaster.log`
+5. Verify token with BotFather: `/mybots` -> select bot -> API Token
 
 ### FaceFusion exits with rc=2
 
 ```bash
-# Check encoder
+# Check current encoder
 grep OUTPUT_VIDEO_ENCODER .env
 
 # Test encoder manually
-ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=30 -c:v $(grep OUTPUT_VIDEO_ENCODER .env | cut -d= -f2) -y /tmp/test.mp4 2>&1 | tail -5
+ENCODER=$(grep OUTPUT_VIDEO_ENCODER .env | cut -d= -f2)
+~/.local/bin/ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=30 -c:v $ENCODER -y /tmp/test.mp4 2>&1 | tail -5
 
-# Try different encoder
+# If fails, try rawvideo
 sed -i 's/OUTPUT_VIDEO_ENCODER=.*/OUTPUT_VIDEO_ENCODER=rawvideo/' .env
+```
+
+### `persistent/config.json` overwriting rclone.conf
+
+The bot auto-restores GDrive token from `persistent/config.json` on startup. If you manually edited `rclone.conf`, the bot may overwrite it. To prevent this:
+```bash
+# Option 1: Update persistent config instead
+nano app/persistent/config.json
+# Update "drive_auth_token" field
+
+# Option 2: Clear stale token
+python3 -c "
+import json
+cfg = json.load(open('app/persistent/config.json'))
+cfg.pop('drive_auth_token', None)
+json.dump(cfg, open('app/persistent/config.json', 'w'), indent=2)
+print('Token cleared from persistent config')
+"
+```
+
+### FFmpeg using conda version instead of static
+
+If you see conda FFmpeg being used (lacks libx264), ensure `~/.local/bin` is FIRST in PATH:
+```bash
+# Check which ffmpeg is being used
+which ffmpeg
+# Should be: /home/user/.local/bin/ffmpeg
+
+# Fix: ensure ~/.local/bin is first
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ---
@@ -488,9 +736,10 @@ sed -i 's/OUTPUT_VIDEO_ENCODER=.*/OUTPUT_VIDEO_ENCODER=rawvideo/' .env
 
 ```
 swapmaster-v1-native/
-├── .env                    # Your config (BOT_TOKEN, paths, etc.)
+├── .env                    # Your config (BOT_TOKEN, paths, etc.) - DO NOT commit
 ├── .env.example            # Config template
 ├── .config/rclone/         # rclone config for GDrive
+│   └── rclone.conf         # GDrive auth token (auto-managed by bot)
 ├── auto_setup.sh           # One-command auto setup
 ├── requirements.txt        # Python dependencies
 ├── README.md               # This file
@@ -498,11 +747,11 @@ swapmaster-v1-native/
 ├── setup.sh / setup.bat    # Manual setup scripts
 ├── run.sh / run.bat        # Bot start scripts
 └── app/
-    ├── startup.py           # Main entry point
+    ├── startup.py           # Main entry point - loads .env, validates, starts bot
     ├── bot.py               # Telegram bot logic (~14K lines)
-    ├── health_check.py      # Health endpoint
+    ├── health_check.py      # Health endpoint (localhost:8765/healthz)
     ├── config/
-    │   └── credentials.py   # Config loader
+    │   └── credentials.py   # Config loader - auto-adds gdrive: prefix
     ├── ops/
     │   ├── gpu_auto_detect.py
     │   ├── process_guard.py
@@ -512,7 +761,7 @@ swapmaster-v1-native/
     │   ├── .assets/models/  # ONNX models (~3.2GB)
     │   └── ... (FaceFusion code)
     ├── persistent/
-    │   ├── config.json      # Runtime config
+    │   ├── config.json      # Runtime config (stores GDrive token)
     │   └── faces/           # Uploaded face photos
     ├── pipeline/
     │   ├── logs/            # Runtime logs
