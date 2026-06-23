@@ -4,7 +4,7 @@ FaceFusion Telegram Bot with GPU support, GDrive upload, MEGA download, and auto
 
 ## Download
 
-**GDrive Backup (1.6GB):** [swapmaster-v1-native-23-06-2026.tar.gz](https://drive.google.com/open?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef)
+**GDrive Backup (6.4GB):** [swapmaster-v1-native-23-06-2026.tar](https://drive.google.com/open?id=1r8kRQX9FwuhRip_m3NwDXYfwh1x4bmGA)
 
 ---
 
@@ -18,8 +18,8 @@ STEP-BY-STEP COMMANDS TO EXECUTE:
 
 # 1. Download and extract the backup
 cd /teamspace/studios/this_studio
-curl -L -o swapmaster.tar.gz "https://drive.google.com/uc?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef"
-tar xzf swapmaster.tar.gz
+curl -L -o swapmaster.tar "https://drive.google.com/uc?id=1r8kRQX9FwuhRip_m3NwDXYfwh1x4bmGA"
+tar xf swapmaster.tar
 cd swapmaster-v1-native
 
 # 2. Add ~/.local/bin to PATH (permanent + current session)
@@ -86,8 +86,8 @@ curl http://localhost:8765/healthz
 
 ```bash
 cd /teamspace/studios/this_studio
-curl -L -o swapmaster.tar.gz "https://drive.google.com/uc?id=1G9n5v8H8iGWWl3U2BDyLPzXeIUov4Fef"
-tar xzf swapmaster.tar.gz
+curl -L -o swapmaster.tar "https://drive.google.com/uc?id=1r8kRQX9FwuhRip_m3NwDXYfwh1x4bmGA"
+tar xf swapmaster.tar
 cd swapmaster-v1-native
 ```
 
