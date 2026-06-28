@@ -1,0 +1,13 @@
+{
+  "mega_email": "your_mega_email@gmail.com",
+  "mega_password": "your_mega_password",
+  "drive_auth_token": {
+    "access_token": "ya29.your_access_token_here",
+    "token_type": "Bearer",
+    "refresh_token": "1//0your_refresh_token_here",
+    "expires_in": 3599
+  },
+  "chat_modes": {},
+  "face_selector_prefs": {},
+  "clip_ranges": {}
+}
